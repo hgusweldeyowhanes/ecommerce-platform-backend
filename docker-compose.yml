@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ecom
+      POSTGRES_USER: ecom
+      POSTGRES_PASSWORD: ecom
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecom -d ecom"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    command: >
+      sh -c "./scripts/wait_for_db.sh &&
+             python manage.py migrate &&
+             python manage.py seed_catalog &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://ecom:ecom@db:5432/ecom
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_TASK_ALWAYS_EAGER: "False"
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      DEBUG: "True"
+      ALLOWED_HOSTS: "*"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+      - media_data:/app/media
+
+  worker:
+    build: .
+    command: celery -A config worker -l info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://ecom:ecom@db:5432/ecom
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_TASK_ALWAYS_EAGER: "False"
+      DJANGO_SETTINGS_MODULE: config.settings.development
+    depends_on:
+      - web
+      - redis
+    volumes:
+      - .:/app
+
+volumes:
+  pgdata:
+  media_data:

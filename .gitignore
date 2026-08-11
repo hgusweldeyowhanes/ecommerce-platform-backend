@@ -1,0 +1,18 @@
+# Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+.env
+.venv/
+venv/
+media/
+staticfiles/
+.coverage
+htmlcov/
+.pytest_cache/
+*.egg-info/
+.mypy_cache/
+.DS_Store
+.idea/
+.vscode/
