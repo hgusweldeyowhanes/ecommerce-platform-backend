@@ -5,6 +5,8 @@ Ecommerce Platform API
 Django REST backend: catalog, cart, orders, payments (Stripe + Chapa),
 inventory, reviews, and notifications.
 
+Full docs: ECOMMERCE_BACKEND_DOCUMENTATION.md (aligned with this codebase).
+
 ## Quick start
 
 ```bash
@@ -29,7 +31,7 @@ API root: http://127.0.0.1:8000/api/v1/
 | Products | `/api/v1/products/` list, detail, categories |
 | Cart | `/api/v1/cart/` get, add/update/remove items |
 | Orders | `/api/v1/orders/` checkout, history |
-| Payments | `/api/v1/payments/` init, webhook |
+| Payments | `/api/v1/payments/` status, mock complete, webhooks |
 | Reviews | `/api/v1/reviews/` product reviews |
 | Inventory | `/api/v1/inventory/` stock (staff) |
 
@@ -49,5 +51,5 @@ docker compose up --build
 - Domain logic in `services.py` / read paths in `selectors.py`
 - Split settings for env-specific config
 - Payment gateways pluggable under `apps/payments/gateways/`
-- Celery tasks for emails/stock when Redis is available
+- Celery tasks for emails when Redis is available
 """
