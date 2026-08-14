@@ -11,6 +11,8 @@ class ChapaGateway:
 
     def create_checkout(self, payment, order, **kwargs):
         if not settings.CHAPA_SECRET_KEY:
+            if not getattr(settings, "ALLOW_MOCK_PAYMENTS", False):
+                raise ServiceError("Chapa is not configured", code="chapa_not_configured")
             return {
                 "checkout_url": f"/api/v1/payments/mock/complete/{payment.reference}/",
                 "gateway_payment_id": f"chapa_pending_{payment.reference}",

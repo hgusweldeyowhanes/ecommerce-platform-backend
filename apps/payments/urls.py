@@ -4,6 +4,7 @@ from .views import (
     ChapaWebhookView,
     MockCompleteView,
     PaymentDetailView,
+    RefundView,
     StripeWebhookView,
 )
 
@@ -15,5 +16,6 @@ urlpatterns = [
     ),
     path("webhooks/stripe/", StripeWebhookView.as_view(), name="stripe-webhook"),
     path("webhooks/chapa/", ChapaWebhookView.as_view(), name="chapa-webhook"),
+    path("<str:reference>/refund/", RefundView.as_view(), name="payment-refund"),
     path("<str:reference>/", PaymentDetailView.as_view(), name="payment-detail"),
 ]

@@ -47,3 +47,16 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.reference} ({self.status})"
+
+
+class WebhookEvent(models.Model):
+    """Idempotent store for gateway webhook deliveries."""
+
+    provider = models.CharField(max_length=20)
+    event_id = models.CharField(max_length=255, unique=True)
+    payload = models.JSONField(default=dict, blank=True)
+    processed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.provider}:{self.event_id}"

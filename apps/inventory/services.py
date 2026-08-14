@@ -92,3 +92,20 @@ def commit_reservation(product, qty: int, reference: str = "") -> InventoryItem:
         reference=reference,
     )
     return inv
+
+
+@transaction.atomic
+def restock_sold(product, qty: int, reference: str = "") -> InventoryItem:
+    """Return sold units after a refund."""
+    inv = ensure_inventory(product)
+    inv = InventoryItem.objects.select_for_update().get(pk=inv.pk)
+    inv.quantity += qty
+    inv.save(update_fields=["quantity", "updated_at"])
+    StockMovement.objects.create(
+        inventory=inv,
+        move_type=STOCK_MOVE_IN,
+        quantity=qty,
+        note="Refund restock",
+        reference=reference,
+    )
+    return inv

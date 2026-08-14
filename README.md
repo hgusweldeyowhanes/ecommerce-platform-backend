@@ -1,55 +1,44 @@
-"""
-Ecommerce Platform API
-======================
+# Ecommerce API (Django REST)
 
-Django REST backend: catalog, cart, orders, payments (Stripe + Chapa),
-inventory, reviews, and notifications.
+Backend for **Merkato**. Pair with `ecommerce-platform-frontend`.
 
-Full docs: ECOMMERCE_BACKEND_DOCUMENTATION.md (aligned with this codebase).
-
-## Quick start
+## Local run
 
 ```bash
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Unix:    source .venv/bin/activate
+.venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
+copy .env.example .env
 python manage.py migrate
-python manage.py seed_catalog   # optional demo data
-python manage.py createsuperuser
+python manage.py seed_catalog
 python manage.py runserver
 ```
 
-API root: http://127.0.0.1:8000/api/v1/
+Use the project venv (`.venv\Scripts\activate`). Plain `python` on this machine is system 3.9 and is missing packages such as Celery. `manage.py` will switch to `.venv` automatically if it exists.
 
-## Main endpoints
+- API: http://127.0.0.1:8000/api/v1/
+- Health: http://127.0.0.1:8000/health/live/
+- Admin: http://127.0.0.1:8000/admin/
 
-| Area | Base path |
-|------|-----------|
-| Auth | `/api/v1/auth/` register, token, me |
-| Products | `/api/v1/products/` list, detail, categories |
-| Cart | `/api/v1/cart/` get, add/update/remove items |
-| Orders | `/api/v1/orders/` checkout, history |
-| Payments | `/api/v1/payments/` status, mock complete, webhooks |
-| Reviews | `/api/v1/reviews/` product reviews |
-| Inventory | `/api/v1/inventory/` stock (staff) |
+Then start the shop: `cd ../ecommerce-platform-frontend && npm install && npm run dev`
 
-## Settings
-
-- `config.settings.development` (default)
-- `config.settings.production`
+Demo coupon: `WELCOME10`
 
 ## Docker
 
 ```bash
+copy .env.example .env
 docker compose up --build
 ```
 
-## Architecture notes
+## Production env
 
-- Domain logic in `services.py` / read paths in `selectors.py`
-- Split settings for env-specific config
-- Payment gateways pluggable under `apps/payments/gateways/`
-- Celery tasks for emails when Redis is available
-"""
+```
+CORS_ALLOWED_ORIGINS=https://your-shop.example.com
+CSRF_TRUSTED_ORIGINS=https://your-shop.example.com
+ALLOWED_HOSTS=api.your-shop.example.com
+PAYMENT_SUCCESS_URL=https://your-shop.example.com/checkout/success
+SECRET_KEY=<40+ random chars>
+DJANGO_SETTINGS_MODULE=config.settings.production
+DATABASE_URL=postgres://...
+```

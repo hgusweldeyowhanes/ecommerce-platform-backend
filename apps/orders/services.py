@@ -1,24 +1,65 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from apps.cart import services as cart_services
-from apps.cart.models import Cart
-from apps.inventory.services import commit_reservation, release_reservation, reserve_stock
+from apps.inventory.services import (
+    commit_reservation,
+    release_reservation,
+    reserve_stock,
+    restock_sold,
+)
 from apps.notifications.services import notify_order_placed
-from common.constants import ORDER_STATUS_CANCELLED, ORDER_STATUS_PAID, ORDER_STATUS_PENDING
+from common.constants import (
+    ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_DELIVERED,
+    ORDER_STATUS_PAID,
+    ORDER_STATUS_PENDING,
+    ORDER_STATUS_PROCESSING,
+    ORDER_STATUS_REFUNDED,
+    ORDER_STATUS_SHIPPED,
+)
 from common.exceptions import ServiceError
 
-from .models import Order, OrderItem
+from .models import Coupon, Order, OrderItem
+
+
+def _idempotent_order(request, key: str, email: str):
+    if not key:
+        return None
+    qs = Order.objects.all()
+    if request.user.is_authenticated:
+        return qs.filter(user=request.user, idempotency_key=key).first()
+    return qs.filter(user__isnull=True, idempotency_key=key, email=email).first()
 
 
 @transaction.atomic
 def create_order_from_cart(request, checkout_data: dict) -> Order:
+    idem_key = (
+        request.headers.get("Idempotency-Key")
+        or checkout_data.get("idempotency_key")
+        or ""
+    ).strip()
+    existing = _idempotent_order(request, idem_key, checkout_data.get("email", ""))
+    if existing:
+        return existing
+
     cart = cart_services.get_or_create_cart(request)
     items = list(cart.items.select_related("product"))
     if not items:
         raise ServiceError("Cart is empty", code="empty_cart")
+
+    subtotal = sum((ci.line_total for ci in items), Decimal("0"))
+    discount = Decimal("0")
+    coupon_code = (checkout_data.get("coupon_code") or "").strip().upper()
+    coupon = None
+    if coupon_code:
+        coupon = Coupon.objects.select_for_update().filter(code__iexact=coupon_code).first()
+        if not coupon or not coupon.is_valid(subtotal):
+            raise ServiceError("Invalid or expired coupon", code="invalid_coupon")
+        discount = coupon.compute_discount(subtotal)
 
     order = Order.objects.create(
         user=request.user if request.user.is_authenticated else None,
@@ -34,7 +75,10 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
         shipping_phone=checkout_data.get("shipping_phone", ""),
         notes=checkout_data.get("notes", ""),
         shipping_fee=Decimal(str(checkout_data.get("shipping_fee") or 0)),
-        currency=items[0].product.currency if items else "USD",
+        currency=items[0].product.currency if items else settings.DEFAULT_CURRENCY,
+        coupon_code=coupon_code,
+        discount=discount,
+        idempotency_key=idem_key,
     )
 
     reserved = []
@@ -57,7 +101,10 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
         order.delete()
         raise
 
-    order.shipping_fee = Decimal(str(checkout_data.get("shipping_fee") or 0))
+    if coupon:
+        coupon.times_used += 1
+        coupon.save(update_fields=["times_used"])
+
     order.recompute_totals()
     cart_services.clear_cart(cart)
     notify_order_placed(order)
@@ -79,15 +126,57 @@ def mark_order_paid(order: Order) -> Order:
 
 @transaction.atomic
 def cancel_order(order: Order) -> Order:
-    if order.status in (ORDER_STATUS_CANCELLED, ORDER_STATUS_PAID):
-        if order.status == ORDER_STATUS_PAID:
-            raise ServiceError("Paid orders cannot be cancelled here", code="invalid_status")
+    if order.status == ORDER_STATUS_PAID:
+        raise ServiceError(
+            "Paid orders cannot be cancelled here; request a refund",
+            code="invalid_status",
+        )
+    if order.status == ORDER_STATUS_CANCELLED:
+        return order
     if order.status == ORDER_STATUS_PENDING:
         for item in order.items.select_related("product"):
             if item.product_id:
-                release_reservation(
-                    item.product, item.quantity, reference=order.order_number
-                )
+                release_reservation(item.product, item.quantity, reference=order.order_number)
     order.status = ORDER_STATUS_CANCELLED
+    order.save(update_fields=["status", "updated_at"])
+    return order
+
+
+@transaction.atomic
+def ship_order(order: Order, tracking_number: str = "", carrier: str = "") -> Order:
+    if order.status not in (ORDER_STATUS_PAID, ORDER_STATUS_PROCESSING):
+        raise ServiceError("Only paid orders can be shipped", code="invalid_status")
+    order.status = ORDER_STATUS_SHIPPED
+    order.tracking_number = tracking_number
+    order.carrier = carrier
+    order.shipped_at = timezone.now()
+    order.save(
+        update_fields=["status", "tracking_number", "carrier", "shipped_at", "updated_at"]
+    )
+    return order
+
+
+@transaction.atomic
+def deliver_order(order: Order) -> Order:
+    if order.status != ORDER_STATUS_SHIPPED:
+        raise ServiceError("Only shipped orders can be marked delivered", code="invalid_status")
+    order.status = ORDER_STATUS_DELIVERED
+    order.save(update_fields=["status", "updated_at"])
+    return order
+
+
+@transaction.atomic
+def refund_order(order: Order) -> Order:
+    if order.status not in (
+        ORDER_STATUS_PAID,
+        ORDER_STATUS_PROCESSING,
+        ORDER_STATUS_SHIPPED,
+        ORDER_STATUS_DELIVERED,
+    ):
+        raise ServiceError("This order cannot be refunded", code="invalid_status")
+    for item in order.items.select_related("product"):
+        if item.product_id:
+            restock_sold(item.product, item.quantity, reference=order.order_number)
+    order.status = ORDER_STATUS_REFUNDED
     order.save(update_fields=["status", "updated_at"])
     return order

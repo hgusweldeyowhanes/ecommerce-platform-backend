@@ -55,3 +55,19 @@ class AddressSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("id", "created_at")
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+

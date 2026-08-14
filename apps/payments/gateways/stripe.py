@@ -9,7 +9,8 @@ class StripeGateway:
 
     def create_checkout(self, payment, order, **kwargs):
         if not settings.STRIPE_SECRET_KEY:
-            # Fallback-style init for local dev without keys
+            if not getattr(settings, "ALLOW_MOCK_PAYMENTS", False):
+                raise ServiceError("Stripe is not configured", code="stripe_not_configured")
             return {
                 "checkout_url": f"/api/v1/payments/mock/complete/{payment.reference}/",
                 "gateway_payment_id": f"stripe_pending_{payment.reference}",

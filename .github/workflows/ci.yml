@@ -1,0 +1,23 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Tests
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          SECRET_KEY: ci-test-secret-key-not-for-production-0123456789
+          DEBUG: "True"
+          ALLOW_MOCK_PAYMENTS: "True"
+        run: pytest

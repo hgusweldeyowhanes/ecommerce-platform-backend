@@ -22,6 +22,7 @@ class Notification(models.Model):
     subject = models.CharField(max_length=255)
     body = models.TextField()
     is_sent = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

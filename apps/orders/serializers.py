@@ -41,6 +41,11 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_country",
             "shipping_phone",
             "notes",
+            "coupon_code",
+            "discount",
+            "tracking_number",
+            "carrier",
+            "shipped_at",
             "items",
             "created_at",
             "paid_at",
@@ -63,5 +68,8 @@ class CheckoutSerializer(serializers.Serializer):
         max_digits=12, decimal_places=2, required=False, default=0
     )
     payment_gateway = serializers.ChoiceField(
-        choices=["mock", "stripe", "chapa"], default="mock"
+        choices=["mock", "stripe", "chapa"], required=False
     )
+    coupon_code = serializers.CharField(required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True)
+

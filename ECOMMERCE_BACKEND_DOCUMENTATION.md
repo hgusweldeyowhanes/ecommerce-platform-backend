@@ -1,6 +1,6 @@
 # Ecommerce Platform Backend — Project Documentation
 
-> **Status:** This document matches the *implemented* codebase in `ecomerce-platform/`  
+> **Status:** This document matches the *implemented* codebase in `ecommerce-platform-backend/`  
 > (not a generic template). Last aligned with the service-layer Django REST API, base URL **`/api/v1/`**.
 
 ---
@@ -108,7 +108,7 @@ Cart items
 ## 4. Project structure
 
 ```
-ecomerce-platform/
+ecommerce-platform-backend/
 ├── manage.py
 ├── requirements.txt
 ├── .env / .env.example
@@ -478,7 +478,7 @@ Stripe: `STRIPE_SECRET_KEY` (+ optional webhook secret for future verify).
 ### Local (SQLite)
 
 ```bash
-cd ecomerce-platform
+cd ecommerce-platform-backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -561,7 +561,7 @@ gunicorn config.wsgi:application --workers 3 --bind 0.0.0.0:8000
 | Forgot password / email verify | **Not implemented** |
 | DB_* env vars | **`DATABASE_URL` or SQLite** |
 | Notifications REST | **Email only** |
-| Folder `ecommerce-backend` | Repo folder **`ecomerce-platform`** |
+| Folder `ecommerce-backend` | Repo folder **`ecommerce-platform-backend`** |
 
 ---
 

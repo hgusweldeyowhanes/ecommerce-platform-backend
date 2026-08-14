@@ -53,19 +53,34 @@ class Order(models.Model):
     shipping_phone = models.CharField(max_length=32, blank=True)
 
     notes = models.TextField(blank=True)
+    coupon_code = models.CharField(max_length=40, blank=True)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    idempotency_key = models.CharField(max_length=64, blank=True, db_index=True)
+    tracking_number = models.CharField(max_length=80, blank=True)
+    carrier = models.CharField(max_length=40, blank=True)
+    shipped_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     paid_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="uniq_user_checkout_idempotency",
+            )
+        ]
 
     def __str__(self):
         return self.order_number
 
     def recompute_totals(self):
         self.subtotal = sum(i.line_total for i in self.items.all())
-        self.total = self.subtotal + self.shipping_fee + self.tax
+        self.total = self.subtotal + self.shipping_fee + self.tax - self.discount
+        if self.total < 0:
+            self.total = 0
         self.save(update_fields=["subtotal", "total", "updated_at"])
 
 
@@ -82,3 +97,44 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name} x{self.quantity}"
+
+
+class Coupon(models.Model):
+    code = models.CharField(max_length=40, unique=True)
+    percent_off = models.PositiveSmallIntegerField(default=0)
+    amount_off = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    max_uses = models.PositiveIntegerField(null=True, blank=True)
+    times_used = models.PositiveIntegerField(default=0)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    min_subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    def __str__(self):
+        return self.code
+
+    def is_valid(self, subtotal=None):
+        from django.utils import timezone
+        from decimal import Decimal
+
+        now = timezone.now()
+        if not self.is_active:
+            return False
+        if self.valid_from and now < self.valid_from:
+            return False
+        if self.valid_until and now > self.valid_until:
+            return False
+        if self.max_uses is not None and self.times_used >= self.max_uses:
+            return False
+        if subtotal is not None and Decimal(str(subtotal)) < self.min_subtotal:
+            return False
+        return True
+
+    def compute_discount(self, subtotal):
+        from decimal import Decimal
+
+        subtotal = Decimal(str(subtotal))
+        if self.percent_off:
+            return (subtotal * self.percent_off / 100).quantize(Decimal("0.01"))
+        return min(Decimal(str(self.amount_off)), subtotal)
+
