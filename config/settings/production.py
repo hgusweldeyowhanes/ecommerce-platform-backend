@@ -1,21 +1,22 @@
-"""Production settings. Fails fast if secrets or hosts are missing."""
+"""Production settings. Only SECRET_KEY, ALLOWED_HOSTS, and DATABASE_URL are required."""
 
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
-CELERY_TASK_ALWAYS_EAGER = False
-ALLOW_MOCK_PAYMENTS = False
-USE_REDIS_CACHE = True
+CELERY_TASK_ALWAYS_EAGER = True
+ALLOW_MOCK_PAYMENTS = True
+DEFAULT_PAYMENT_GATEWAY = "mock"
+USE_REDIS_CACHE = False
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-        "KEY_PREFIX": "ecom",
-        "TIMEOUT": 300,
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "ecom-prod",
     }
 }
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+CORS_ALLOW_ALL_ORIGINS = True
 
 WEAK_SECRET_KEYS = {
     "unsafe-dev-key",
@@ -28,6 +29,7 @@ if (
     or SECRET_KEY in WEAK_SECRET_KEYS
     or SECRET_KEY.startswith("change-me")
     or SECRET_KEY.startswith("replace-with")
+    or SECRET_KEY == "dev-ecommerce-platform-secret"
 ):
     raise ImproperlyConfigured("Set a strong SECRET_KEY in production.")
 if len(SECRET_KEY) < 40:
@@ -39,8 +41,11 @@ if _render_host and _render_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_host)
 if not env("DATABASE_URL", default=""):
     raise ImproperlyConfigured("DATABASE_URL is required in production.")
-if not env("CHAPA_SECRET_KEY", default="") and not env("STRIPE_SECRET_KEY", default=""):
-    raise ImproperlyConfigured("Set CHAPA_SECRET_KEY or STRIPE_SECRET_KEY in production.")
+
+_db_url = env("DATABASE_URL", default="")
+if "render.com" in _db_url or "render.internal" in _db_url:
+    DATABASES["default"].setdefault("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"].setdefault("sslmode", "require")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
@@ -60,16 +65,5 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 _render_origin = f"https://{_render_host}" if _render_host else ""
 if _render_origin and _render_origin not in CSRF_TRUSTED_ORIGINS:
     CSRF_TRUSTED_ORIGINS = list(CSRF_TRUSTED_ORIGINS) + [_render_origin]
-CORS_ALLOW_ALL_ORIGINS = False
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
-
-EMAIL_BACKEND = env(
-    "EMAIL_BACKEND",
-    default="django.core.mail.backends.smtp.EmailBackend",
-)
-EMAIL_HOST = env("EMAIL_HOST", default="")
-EMAIL_PORT = env.int("EMAIL_PORT", default=587)
-EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)

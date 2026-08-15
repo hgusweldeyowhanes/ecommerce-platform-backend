@@ -4,7 +4,7 @@ mkdir -p /app/media /app/staticfiles
 ./scripts/wait_for_db.sh
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
-if [ "${SEED_CATALOG:-False}" = "True" ] || [ "${SEED_CATALOG:-false}" = "true" ]; then
+if [ "${SEED_CATALOG:-True}" = "True" ] || [ "${SEED_CATALOG:-true}" = "true" ]; then
   python manage.py seed_catalog
 fi
 exec gunicorn config.wsgi:application \
