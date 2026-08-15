@@ -24,21 +24,24 @@ Then start the shop: `cd ../ecommerce-platform-frontend && npm install && npm ru
 
 Demo coupon: `WELCOME10`
 
-## Docker
+## Docker (local)
 
 ```bash
 copy .env.example .env
 docker compose up --build
 ```
 
-## Production env
+## Deploy (production)
 
+1. Copy `.env.production.example` to `.env`
+2. Set `SECRET_KEY`, `POSTGRES_PASSWORD`, `ALLOWED_HOSTS`, CORS/CSRF origins, and `CHAPA_SECRET_KEY`
+3. Create a superuser after first boot: `docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser`
+
+```bash
+copy .env.production.example .env
+docker compose -f docker-compose.prod.yml up --build -d
 ```
-CORS_ALLOWED_ORIGINS=https://your-shop.example.com
-CSRF_TRUSTED_ORIGINS=https://your-shop.example.com
-ALLOWED_HOSTS=api.your-shop.example.com
-PAYMENT_SUCCESS_URL=https://your-shop.example.com/checkout/success
-SECRET_KEY=<40+ random chars>
-DJANGO_SETTINGS_MODULE=config.settings.production
-DATABASE_URL=postgres://...
-```
+
+The API is on port 80 (`/api/v1/`, `/media/`, `/health/live/`). Point the shop's `API_UPSTREAM` or `VITE_API_URL` at this host.
+
+Put HTTPS in front (Caddy, nginx, or your host), then set `SECURE_SSL_REDIRECT=True` and `PAYMENT_SUCCESS_URL` to `https://...`.
