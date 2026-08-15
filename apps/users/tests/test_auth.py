@@ -14,6 +14,7 @@ class AuthTests(TestCase):
                 "username": "newuser",
                 "email": "n@e.com",
                 "password": "StrongPass123!",
+                "password_confirm": "StrongPass123!",
             },
             format="json",
         )
