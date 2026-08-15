@@ -136,7 +136,15 @@ def _photo_bytes(name):
 
 
 def _attach_image(product, force=False):
-    if product.image and not force:
+    from pathlib import Path
+
+    on_disk = False
+    if product.image:
+        try:
+            on_disk = Path(product.image.path).is_file()
+        except (ValueError, OSError):
+            on_disk = False
+    if on_disk and not force:
         return False
     raw = _photo_bytes(product.name)
     filename = f"{slugify(product.name)}.jpg"
