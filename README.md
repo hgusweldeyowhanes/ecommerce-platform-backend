@@ -1,6 +1,6 @@
 # Ecommerce API (Django REST)
 
-Backend for **Merkato**. Pair with `ecommerce-platform-frontend`.
+Backend for **Adera**. Pair with `ecommerce-platform-frontend`.
 
 ## Local run
 
