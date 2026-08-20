@@ -19,6 +19,7 @@ Use the project venv (`.venv\Scripts\activate`). Plain `python` on this machine 
 - API: http://127.0.0.1:8000/api/v1/
 - Health: http://127.0.0.1:8000/health/live/
 - Admin: http://127.0.0.1:8000/admin/
+- Wishlist (auth): http://127.0.0.1:8000/api/v1/wishlist/
 
 Then start the shop: `cd ../ecommerce-platform-frontend && npm install && npm run dev`
 
