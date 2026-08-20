@@ -69,6 +69,7 @@ Use this table so docs and code stay honest.
 | Payments mock / Stripe / Chapa | Yes | Keys empty → mock checkout URL |
 | Stripe / Chapa webhooks (minimal) | Yes | Stubs under `/payments/webhooks/` |
 | Reviews 1–5 stars | Yes | Unique `(product, user)` |
+| Wishlist | Yes | Auth only: list, add, toggle, remove, move-to-cart |
 | Order placement email notification | Yes | Celery task + console email backend |
 | Email verification / forgot password | **No** | Not in routes or models |
 | Product multi-image / attributes models | **Partial** | `attributes` JSON + single `image` only |
@@ -292,6 +293,18 @@ Fields: `rating` 1–5, `title`, `body`, `is_approved` — **not** `verified_pur
 - Model + `notify_order_placed` + Celery `send_notification_email`
 - **No** REST routes registered for listing notifications
 
+### 6.9 Wishlist (`apps.wishlist`)
+
+Auth required. One row per `(user, product)`.
+
+| Endpoint | Notes |
+|----------|--------|
+| `GET /api/v1/wishlist/` | `{ items, item_count }` with nested product |
+| `POST /api/v1/wishlist/items/` | `{ "product_id": 1 }` — 201 on create, 200 if already saved |
+| `POST /api/v1/wishlist/toggle/` | Adds or removes; returns `in_wishlist` |
+| `DELETE /api/v1/wishlist/items/{id}/` | Remove |
+| `POST /api/v1/wishlist/items/{id}/move-to-cart/` | Adds qty 1 to cart, drops wishlist row |
+
 ---
 
 ## 7. API reference
@@ -390,6 +403,17 @@ Authorization: Bearer ...
   "body": "Works as expected"
 }
 ```
+
+### Wishlist
+
+```http
+POST /api/v1/wishlist/toggle/
+Authorization: Bearer ...
+
+{ "product_id": 1 }
+```
+
+Returns `{ items, item_count, in_wishlist }`.
 
 ---
 

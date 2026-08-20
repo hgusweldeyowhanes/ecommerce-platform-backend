@@ -27,6 +27,7 @@ def api_root(request):
                 "reviews": "/api/v1/reviews/",
                 "inventory": "/api/v1/inventory/",
                 "notifications": "/api/v1/notifications/",
+                "wishlist": "/api/v1/wishlist/",
             },
         }
     )
@@ -46,5 +47,6 @@ urlpatterns = [
     path("api/v1/reviews/", include("apps.reviews.urls")),
     path("api/v1/inventory/", include("apps.inventory.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
+    path("api/v1/wishlist/", include("apps.wishlist.urls")),
     re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
 ]
