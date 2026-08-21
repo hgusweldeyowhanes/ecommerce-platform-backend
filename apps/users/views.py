@@ -1,9 +1,7 @@
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import generics, permissions, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,6 +19,7 @@ from .serializers import (
     UserSerializer,
 )
 from . import services
+from .tokens import email_verify_token, send_email_verification, send_password_reset
 
 User = get_user_model()
 
@@ -69,15 +68,7 @@ class PasswordResetRequestView(APIView):
         ser.is_valid(raise_exception=True)
         user = User.objects.filter(email__iexact=ser.validated_data["email"]).first()
         if user:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            send_mail(
-                "Reset your password",
-                f"Use uid={uid} and token={token} with POST /api/v1/auth/password/reset/confirm/",
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=True,
-            )
+            send_password_reset(user)
         return Response({"detail": "If that email exists, a reset message was sent."})
 
 
@@ -98,6 +89,38 @@ class PasswordResetConfirmView(APIView):
         user.set_password(ser.validated_data["password"])
         user.save()
         return Response({"detail": "Password reset complete"})
+
+
+class EmailVerifyRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [AuthThrottle]
+
+    def post(self, request):
+        if request.user.email_verified:
+            return Response({"detail": "Already verified"})
+        if not request.user.email:
+            return Response({"detail": "Add an email first"}, status=400)
+        send_email_verification(request.user)
+        return Response({"detail": "Verification email sent"})
+
+
+class EmailVerifyConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthThrottle]
+
+    def post(self, request):
+        uid = request.data.get("uid") or ""
+        token = request.data.get("token") or ""
+        try:
+            pk = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=pk)
+        except (User.DoesNotExist, ValueError, OverflowError, TypeError):
+            return Response({"detail": "Invalid link", "code": "invalid_token"}, status=400)
+        if not email_verify_token.check_token(user, token):
+            return Response({"detail": "Invalid or expired token", "code": "invalid_token"}, status=400)
+        user.email_verified = True
+        user.save(update_fields=["email_verified"])
+        return Response({"detail": "Email verified"})
 
 
 class AddressViewSet(viewsets.ModelViewSet):

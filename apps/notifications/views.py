@@ -19,3 +19,8 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         note.is_read = True
         note.save(update_fields=["is_read"])
         return Response(self.get_serializer(note).data)
+
+    @action(detail=False, methods=["post"])
+    def read_all(self, request):
+        updated = self.get_queryset().filter(is_read=False).update(is_read=True)
+        return Response({"updated": updated})

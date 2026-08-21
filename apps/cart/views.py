@@ -33,6 +33,7 @@ class CartItemAddView(APIView):
                 cart,
                 ser.validated_data["product_id"],
                 ser.validated_data.get("quantity", 1),
+                ser.validated_data.get("variant_id"),
             )
         except ServiceError as e:
             return Response({"detail": e.message, "code": e.code}, status=400)

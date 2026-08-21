@@ -40,11 +40,29 @@ class Cart(models.Model):
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    variant = models.ForeignKey(
+        "products.ProductVariant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cart_items",
+    )
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
-        unique_together = ("cart", "product")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cart", "product"],
+                condition=models.Q(variant__isnull=True),
+                name="uniq_cart_product_no_variant",
+            ),
+            models.UniqueConstraint(
+                fields=["cart", "product", "variant"],
+                condition=models.Q(variant__isnull=False),
+                name="uniq_cart_product_variant",
+            ),
+        ]
 
     @property
     def line_total(self):

@@ -11,6 +11,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "product",
             "product_name",
             "sku",
+            "variant_name",
             "unit_price",
             "quantity",
             "line_total",

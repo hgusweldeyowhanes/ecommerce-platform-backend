@@ -8,6 +8,8 @@ from .models import Cart, CartItem
 class CartItemSerializer(serializers.ModelSerializer):
     product = ProductListSerializer(read_only=True)
     product_id = serializers.IntegerField(write_only=True)
+    variant_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    variant_name = serializers.SerializerMethodField()
     line_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
@@ -16,11 +18,17 @@ class CartItemSerializer(serializers.ModelSerializer):
             "id",
             "product",
             "product_id",
+            "variant",
+            "variant_id",
+            "variant_name",
             "quantity",
             "unit_price",
             "line_total",
         )
-        read_only_fields = ("unit_price",)
+        read_only_fields = ("unit_price", "variant")
+
+    def get_variant_name(self, obj):
+        return obj.variant.name if obj.variant_id else ""
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -39,3 +47,4 @@ class CartSerializer(serializers.ModelSerializer):
 class CartItemWriteSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1, default=1)
+    variant_id = serializers.IntegerField(required=False, allow_null=True)
