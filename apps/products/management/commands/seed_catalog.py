@@ -1,8 +1,6 @@
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
@@ -13,45 +11,26 @@ from apps.inventory.services import ensure_inventory
 from apps.orders.models import Coupon
 from apps.products.models import Category, Product, ProductVariant
 
-# Local seed photos (from Tradiva logo / Habesha dress art). Offline-reliable.
+# Local product photos from the Tradiva Google Drive set (tilf1–tilf7).
+# Sources: https://drive.google.com/file/d/1nOqP1QBFG1Cp8sVSIzd-L2jZ54ABM2cZ/view
 SEED_DIR = Path(__file__).resolve().parent.parent.parent / "seed_images"
 SEED_FILES = {
-    "Tigray Tilf Kemis": "habesha-a.jpg",
-    "Classic White Habesha Kemis": "habesha-b.jpg",
-    "Handwoven Netela Shawl": "habesha-c.jpg",
-    "Men's Shemma Shirt": "habesha-dress.jpg",
-    "Golden Tibeb Dress": "habesha-a.jpg",
-    "Bridal Habesha Kemis": "habesha-c.jpg",
-    "Kids Mini Kemis": "habesha-b.jpg",
-    "Tilf Shash Headwrap": "habesha-dress.jpg",
-    "Cotton Gabbi Wrap": "habesha-b.jpg",
-    "Festive Red-Trim Kemis": "habesha-dress.jpg",
-    "Men's Tilf Collar Shirt": "habesha-dress.jpg",
-    "Wedding Netela Pair": "habesha-a.jpg",
-    "Everyday Soft Kemis": "habesha-b.jpg",
-    "Handwoven Tilf Belt": "habesha-c.jpg",
-    "Zuria Ceremony Set": "habesha-a.jpg",
-    "Tilf Stripe Pants": "habesha-dress.jpg",
-}
-
-# Optional remote photos (used only if local seed file missing).
-PHOTO_URLS = {
-    "Tigray Tilf Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
-    "Classic White Habesha Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
-    "Handwoven Netela Shawl": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
-    "Men's Shemma Shirt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
-    "Golden Tibeb Dress": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
-    "Bridal Habesha Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
-    "Kids Mini Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
-    "Tilf Shash Headwrap": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
-    "Cotton Gabbi Wrap": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
-    "Festive Red-Trim Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
-    "Men's Tilf Collar Shirt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
-    "Wedding Netela Pair": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
-    "Everyday Soft Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
-    "Handwoven Tilf Belt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
-    "Zuria Ceremony Set": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
-    "Tilf Stripe Pants": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
+    "Tigray Tilf Kemis": "tilf1.png",
+    "Classic White Habesha Kemis": "tilf2.png",
+    "Handwoven Netela Shawl": "tilf3.png",
+    "Men's Shemma Shirt": "tilf4.png",
+    "Golden Tibeb Dress": "tilf5.png",
+    "Bridal Habesha Kemis": "tilf6.png",
+    "Kids Mini Kemis": "tilf7.png",
+    "Tilf Shash Headwrap": "tilf8.png",
+    "Cotton Gabbi Wrap": "tilf9.png",
+    "Festive Red-Trim Kemis": "tilf10.png",
+    "Visit Tigray home of civilization": "im1.png",
+    "Wedding Netela Pair": "tilf1.png",
+    "Everyday Soft Kemis": "tilf2.png",
+    "Handwoven Tilf Belt": "tilf8.png",
+    "Zuria Ceremony Set": "tilf9.png",
+    "Tilf Stripe Pants": "tilf10.png",
 }
 
 CATEGORIES = ("Women's Wear", "Men's Wear", "Accessories", "Kids", "Wedding")
@@ -267,33 +246,28 @@ def _draw_product(name):
     return buf.getvalue()
 
 
+def _to_jpeg(raw: bytes) -> bytes:
+    img = Image.open(BytesIO(raw))
+    if img.mode in ("RGBA", "P"):
+        background = Image.new("RGB", img.size, (247, 241, 230))
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
+        img = background
+    else:
+        img = img.convert("RGB")
+    img.thumbnail((1400, 1600))
+    out = BytesIO()
+    img.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
 def _photo_bytes(name):
     local_name = SEED_FILES.get(name)
     if local_name:
         local = SEED_DIR / local_name
         if local.is_file():
-            return local.read_bytes()
-
-    url = PHOTO_URLS.get(name)
-    if url:
-        try:
-            req = Request(
-                url,
-                headers={
-                    "User-Agent": "TradivaCatalog/1.0 (local ecommerce seed; educational)",
-                    "Accept": "image/jpeg,image/png,image/*;q=0.8",
-                },
-            )
-            with urlopen(req, timeout=45) as resp:
-                data = resp.read()
-            if data[:3] == b"\xff\xd8\xff" or data[:8] == b"\x89PNG\r\n\x1a\n":
-                img = Image.open(BytesIO(data)).convert("RGB")
-                img.thumbnail((1200, 1500))
-                out = BytesIO()
-                img.save(out, format="JPEG", quality=88)
-                return out.getvalue()
-        except (OSError, HTTPError, URLError):
-            pass
+            return _to_jpeg(local.read_bytes())
     return _draw_product(name)
 
 
@@ -407,11 +381,8 @@ class Command(BaseCommand):
                     )
 
         if replace:
-            deactivated = (
-                Product.objects.exclude(sku__in=keep_skus)
-                .filter(is_active=True)
-                .update(is_active=False)
-            )
+            old_qs = Product.objects.exclude(sku__in=keep_skus)
+            deactivated = old_qs.update(is_active=False, is_featured=False)
             self.stdout.write(f"Deactivated {deactivated} old catalog items.")
 
         Coupon.objects.get_or_create(
