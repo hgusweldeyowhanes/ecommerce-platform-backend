@@ -5,7 +5,9 @@ mkdir -p /app/media /app/staticfiles
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 if [ "${SEED_CATALOG:-True}" = "True" ] || [ "${SEED_CATALOG:-true}" = "true" ]; then
-  python manage.py seed_catalog
+  # --replace hides old Adera demo SKUs; --force-images rewrites media after Render's
+  # ephemeral disk wipe so Google Drive seed photos stay available.
+  python manage.py seed_catalog --replace --force-images
 fi
 exec gunicorn config.wsgi:application \
   --bind "0.0.0.0:${PORT:-8000}" \
