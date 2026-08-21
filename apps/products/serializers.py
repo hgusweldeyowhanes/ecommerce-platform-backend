@@ -79,14 +79,12 @@ class ProductListSerializer(serializers.ModelSerializer):
         return any(v.is_active for v in variants.all())
 
     def get_image(self, obj):
-        request = self.context.get("request")
+        # Relative /media/... URLs so the Vite proxy (and same-origin deploys) serve them.
         if obj.image:
-            url = obj.image.url
-            return request.build_absolute_uri(url) if request else url
+            return obj.image.url
         first = obj.images.first() if hasattr(obj, "images") else None
         if first and first.image:
-            url = first.image.url
-            return request.build_absolute_uri(url) if request else url
+            return first.image.url
         return None
 
 

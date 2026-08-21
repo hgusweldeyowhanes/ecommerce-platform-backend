@@ -1,5 +1,8 @@
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
@@ -9,6 +12,47 @@ from PIL import Image, ImageDraw, ImageFont
 from apps.inventory.services import ensure_inventory
 from apps.orders.models import Coupon
 from apps.products.models import Category, Product, ProductVariant
+
+# Local seed photos (from Tradiva logo / Habesha dress art). Offline-reliable.
+SEED_DIR = Path(__file__).resolve().parent.parent.parent / "seed_images"
+SEED_FILES = {
+    "Tigray Tilf Kemis": "habesha-a.jpg",
+    "Classic White Habesha Kemis": "habesha-b.jpg",
+    "Handwoven Netela Shawl": "habesha-c.jpg",
+    "Men's Shemma Shirt": "habesha-dress.jpg",
+    "Golden Tibeb Dress": "habesha-a.jpg",
+    "Bridal Habesha Kemis": "habesha-c.jpg",
+    "Kids Mini Kemis": "habesha-b.jpg",
+    "Tilf Shash Headwrap": "habesha-dress.jpg",
+    "Cotton Gabbi Wrap": "habesha-b.jpg",
+    "Festive Red-Trim Kemis": "habesha-dress.jpg",
+    "Men's Tilf Collar Shirt": "habesha-dress.jpg",
+    "Wedding Netela Pair": "habesha-a.jpg",
+    "Everyday Soft Kemis": "habesha-b.jpg",
+    "Handwoven Tilf Belt": "habesha-c.jpg",
+    "Zuria Ceremony Set": "habesha-a.jpg",
+    "Tilf Stripe Pants": "habesha-dress.jpg",
+}
+
+# Optional remote photos (used only if local seed file missing).
+PHOTO_URLS = {
+    "Tigray Tilf Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
+    "Classic White Habesha Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
+    "Handwoven Netela Shawl": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
+    "Men's Shemma Shirt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
+    "Golden Tibeb Dress": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
+    "Bridal Habesha Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
+    "Kids Mini Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
+    "Tilf Shash Headwrap": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
+    "Cotton Gabbi Wrap": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
+    "Festive Red-Trim Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
+    "Men's Tilf Collar Shirt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
+    "Wedding Netela Pair": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
+    "Everyday Soft Kemis": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Habesha_woman-c.jpg/640px-Habesha_woman-c.jpg",
+    "Handwoven Tilf Belt": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Habesha_Dress.jpg/640px-Habesha_Dress.jpg",
+    "Zuria Ceremony Set": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Habesha_woman-a.jpg/640px-Habesha_woman-a.jpg",
+    "Tilf Stripe Pants": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Habesha_woman-b.jpg/640px-Habesha_woman-b.jpg",
+}
 
 CATEGORIES = ("Women's Wear", "Men's Wear", "Accessories", "Kids", "Wedding")
 
@@ -224,8 +268,32 @@ def _draw_product(name):
 
 
 def _photo_bytes(name):
-    # Prefer on-brand traditional tiles so every sample looks like Tigray / Habesha dress.
-    # External fashion stock often misses tilf/kemis detail.
+    local_name = SEED_FILES.get(name)
+    if local_name:
+        local = SEED_DIR / local_name
+        if local.is_file():
+            return local.read_bytes()
+
+    url = PHOTO_URLS.get(name)
+    if url:
+        try:
+            req = Request(
+                url,
+                headers={
+                    "User-Agent": "TradivaCatalog/1.0 (local ecommerce seed; educational)",
+                    "Accept": "image/jpeg,image/png,image/*;q=0.8",
+                },
+            )
+            with urlopen(req, timeout=45) as resp:
+                data = resp.read()
+            if data[:3] == b"\xff\xd8\xff" or data[:8] == b"\x89PNG\r\n\x1a\n":
+                img = Image.open(BytesIO(data)).convert("RGB")
+                img.thumbnail((1200, 1500))
+                out = BytesIO()
+                img.save(out, format="JPEG", quality=88)
+                return out.getvalue()
+        except (OSError, HTTPError, URLError):
+            pass
     return _draw_product(name)
 
 
