@@ -37,6 +37,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User(**validated_data)
         user.set_password(password)
         user.save()
+        from .tokens import send_email_verification
+
+        if user.email:
+            send_email_verification(user)
         return user
 
 
@@ -52,6 +56,7 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "is_vendor",
             "is_staff",
+            "email_verified",
             "date_joined",
         )
         read_only_fields = fields

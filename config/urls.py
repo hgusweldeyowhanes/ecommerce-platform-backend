@@ -14,7 +14,7 @@ from common.health import liveness, readiness
 def api_root(request):
     return Response(
         {
-            "service": "ecommerce-platform",
+            "service": "tradiva",
             "version": "v1",
             "health": "/health/",
             "ready": "/health/ready/",
@@ -28,6 +28,7 @@ def api_root(request):
                 "inventory": "/api/v1/inventory/",
                 "notifications": "/api/v1/notifications/",
                 "wishlist": "/api/v1/wishlist/",
+            "staff_dashboard": "/api/v1/orders/dashboard/",
             },
         }
     )

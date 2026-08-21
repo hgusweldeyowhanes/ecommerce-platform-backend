@@ -89,8 +89,16 @@ class OrderItem(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.SET_NULL, null=True, blank=True
     )
+    variant = models.ForeignKey(
+        "products.ProductVariant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_items",
+    )
     product_name = models.CharField(max_length=255)
     sku = models.CharField(max_length=64)
+    variant_name = models.CharField(max_length=120, blank=True)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     quantity = models.PositiveIntegerField()
     line_total = models.DecimalField(max_digits=12, decimal_places=2)

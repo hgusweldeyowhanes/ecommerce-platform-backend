@@ -7,7 +7,7 @@ def product_list_qs():
     return (
         Product.objects.filter(is_active=True)
         .select_related("category", "inventory")
-        .all()
+        .prefetch_related("images", "variants")
     )
 
 

@@ -34,7 +34,11 @@ class ProductViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = product_list_qs()
         if self.request.user.is_staff:
-            qs = Product.objects.select_related("category", "inventory").all()
+            qs = (
+                Product.objects.select_related("category", "inventory")
+                .prefetch_related("images", "variants")
+                .all()
+            )
         return qs
 
     def get_serializer_class(self):

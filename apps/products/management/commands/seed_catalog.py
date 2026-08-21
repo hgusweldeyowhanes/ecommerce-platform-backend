@@ -1,6 +1,5 @@
 from decimal import Decimal
 from io import BytesIO
-from urllib.request import Request, urlopen
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
@@ -9,91 +8,167 @@ from PIL import Image, ImageDraw, ImageFont
 
 from apps.inventory.services import ensure_inventory
 from apps.orders.models import Coupon
-from apps.products.models import Category, Product
+from apps.products.models import Category, Product, ProductVariant
 
-PHOTO_URLS = {
-    "Wireless Earbuds": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=900&q=80",
-    "Smart Watch": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
-    "Bluetooth Speaker": "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=900&q=80",
-    "Studio Headphones": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
-    "USB-C Power Bank": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?auto=format&fit=crop&w=900&q=80",
-    "Cotton Tee": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=80",
-    "Running Shoes": "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
-    "Denim Jacket": "https://images.unsplash.com/photo-1544022613-e87ca75a784a?auto=format&fit=crop&w=900&q=80",
-    "Linen Shirt": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
-    "City Backpack": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80",
-    "Desk Lamp": "https://images.unsplash.com/photo-1507473882602-f95c4a17c9c9?auto=format&fit=crop&w=900&q=80",
-    "Ceramic Mug": "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=900&q=80",
-    "Wool Throw": "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&w=900&q=80",
-    "Wall Clock": "https://images.unsplash.com/photo-1563861826100-9cb868fdbe1c?auto=format&fit=crop&w=900&q=80",
-    "Ceramic Planter": "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&w=900&q=80",
-    "Shea Body Cream": "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&w=900&q=80",
-    "Yoga Mat": "https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?auto=format&fit=crop&w=900&q=80",
-    "Insulated Bottle": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=80",
-}
-
-PALETTE = {
-    "Wireless Earbuds": ((28, 61, 48), (201, 162, 39)),
-    "Smart Watch": ((22, 77, 54), (232, 220, 196)),
-    "Bluetooth Speaker": ((30, 30, 30), (201, 162, 39)),
-    "Studio Headphones": ((20, 20, 20), (180, 40, 40)),
-    "USB-C Power Bank": ((40, 44, 52), (200, 200, 200)),
-    "Cotton Tee": ((90, 58, 42), (245, 236, 220)),
-    "Running Shoes": ((155, 44, 44), (28, 25, 20)),
-    "Denim Jacket": ((37, 64, 97), (232, 220, 196)),
-    "Linen Shirt": ((196, 164, 132), (90, 58, 42)),
-    "City Backpack": ((40, 32, 28), (201, 162, 39)),
-    "Desk Lamp": ((201, 162, 39), (28, 25, 20)),
-    "Ceramic Mug": ((31, 107, 74), (246, 241, 231)),
-    "Wool Throw": ((140, 90, 70), (246, 241, 231)),
-    "Wall Clock": ((28, 25, 20), (232, 220, 196)),
-    "Ceramic Planter": ((31, 107, 74), (180, 200, 160)),
-    "Shea Body Cream": ((232, 200, 180), (90, 58, 42)),
-    "Yoga Mat": ((90, 40, 80), (246, 241, 231)),
-    "Insulated Bottle": ((30, 80, 120), (232, 220, 196)),
-}
-
-CATEGORIES = ("Electronics", "Fashion", "Home", "Beauty", "Sports")
+CATEGORIES = ("Women's Wear", "Men's Wear", "Accessories", "Kids", "Wedding")
 
 # sku, name, category, price, stock, featured, description
 CATALOG = [
-    ("EB-001", "Wireless Earbuds", "Electronics", "49.99", 40, True,
-     "Compact earbuds with a clear everyday mix and a charging case that lasts through a commute."),
-    ("SW-002", "Smart Watch", "Electronics", "129.00", 25, True,
-     "Track steps, heart rate, and calls from your wrist. Water-resistant for rain and workouts."),
-    ("SP-003", "Bluetooth Speaker", "Electronics", "59.00", 35, True,
-     "Room-filling sound in a portable can. Pair in seconds for kitchen, balcony, or road trips."),
-    ("HP-004", "Studio Headphones", "Electronics", "89.00", 28, False,
-     "Over-ear cushions and a wired/wireless mix for focus work, films, and late-night listening."),
-    ("PB-005", "USB-C Power Bank", "Electronics", "32.00", 60, False,
-     "10,000 mAh backup battery with USB-C in and out. Keep a phone and earbuds alive on the go."),
-    ("CT-010", "Cotton Tee", "Fashion", "19.50", 100, True,
-     "Mid-weight cotton, relaxed cut. Washes well and layers under a jacket without bulk."),
-    ("RS-011", "Running Shoes", "Fashion", "89.00", 30, True,
-     "Cushioned daily trainers for pavement runs and all-day wear around the city."),
-    ("DJ-012", "Denim Jacket", "Fashion", "74.00", 22, False,
-     "Classic indigo jacket with a straight fit. Works over tees in Addis evenings."),
-    ("LS-013", "Linen Shirt", "Fashion", "45.00", 40, False,
-     "Breathable linen for warm days. Light, unstructured, and easy to dress up or down."),
-    ("BP-014", "City Backpack", "Fashion", "54.00", 36, False,
-     "Padded laptop sleeve and a bottle pocket. Built for office days and weekend errands."),
-    ("DL-020", "Desk Lamp", "Home", "34.00", 50, False,
-     "Warm directional light for reading and late work. Compact base for a crowded desk."),
-    ("CM-021", "Ceramic Mug", "Home", "12.00", 80, False,
-     "A sturdy everyday mug with a comfortable handle. Dishwasher safe."),
-    ("WT-022", "Wool Throw", "Home", "48.00", 24, True,
-     "Soft throw for sofas and cool nights. Neutral weave that sits well in most rooms."),
-    ("WC-023", "Wall Clock", "Home", "27.00", 40, False,
-     "Quiet sweep movement and a clear face. A simple piece for kitchen or hallway."),
-    ("PL-024", "Ceramic Planter", "Home", "18.00", 55, False,
-     "Drainage hole and a saucer included. Sized for herbs or a small indoor plant."),
-    ("BC-030", "Shea Body Cream", "Beauty", "16.00", 70, False,
-     "Rich shea cream for dry skin. Light scent, made for highland mornings."),
-    ("YM-040", "Yoga Mat", "Sports", "29.00", 45, False,
-     "Non-slip 6mm mat that rolls tight. Use at home or carry to a class."),
-    ("IB-041", "Insulated Bottle", "Sports", "22.00", 80, False,
-     "Keeps water cold through a hot afternoon. Leak-resistant lid for bags and desks."),
+    (
+        "TK-001",
+        "Tigray Tilf Kemis",
+        "Women's Wear",
+        "189.00",
+        24,
+        True,
+        "White Habesha kemis with classic Tigray tilf geometric borders in green, gold, red, and black. Hand-finished tibeb along the hem and sleeves.",
+    ),
+    (
+        "HK-002",
+        "Classic White Habesha Kemis",
+        "Women's Wear",
+        "149.00",
+        30,
+        True,
+        "Breathable shemma cotton kemis with a clean silhouette and subtle embroidered trim. Everyday elegance for church, holidays, and family gatherings.",
+    ),
+    (
+        "NS-003",
+        "Handwoven Netela Shawl",
+        "Accessories",
+        "68.00",
+        40,
+        True,
+        "Light double-layer netela with colorful tilf edges. Drape over a kemis for warmth and ceremony.",
+    ),
+    (
+        "MS-004",
+        "Men's Shemma Shirt",
+        "Men's Wear",
+        "79.00",
+        28,
+        True,
+        "Traditional white cotton shirt with a soft collar and fine handwoven detail at the placket.",
+    ),
+    (
+        "GT-005",
+        "Golden Tibeb Dress",
+        "Women's Wear",
+        "220.00",
+        16,
+        True,
+        "Statement kemis with rich gold tibeb embroidery across the bodice and hem. Made for celebrations.",
+    ),
+    (
+        "BK-006",
+        "Bridal Habesha Kemis",
+        "Wedding",
+        "320.00",
+        10,
+        True,
+        "Full bridal set inspired by Tigray wedding dress: flowing white kemis, ornate tilf, and matching netela.",
+    ),
+    (
+        "KK-007",
+        "Kids Mini Kemis",
+        "Kids",
+        "59.00",
+        35,
+        False,
+        "Soft cotton mini kemis for girls, with playful but traditional tilf borders sized for children.",
+    ),
+    (
+        "SH-008",
+        "Tilf Shash Headwrap",
+        "Accessories",
+        "34.00",
+        50,
+        False,
+        "Embroidered shash headwrap with Tigray-style diamond motifs. Pairs with any white kemis.",
+    ),
+    (
+        "CG-009",
+        "Cotton Gabbi Wrap",
+        "Accessories",
+        "55.00",
+        32,
+        False,
+        "Thick cotton gabbi for cool highland evenings. Neutral weave with a thin colored edge.",
+    ),
+    (
+        "FK-010",
+        "Festive Red-Trim Kemis",
+        "Women's Wear",
+        "175.00",
+        20,
+        True,
+        "White kemis framed with bold red and gold tilf — festive without losing traditional form.",
+    ),
+    (
+        "MC-011",
+        "Men's Tilf Collar Shirt",
+        "Men's Wear",
+        "92.00",
+        22,
+        False,
+        "Tailored men's shirt with a narrow green-and-gold tilf collar band. Smart for weddings and holidays.",
+    ),
+    (
+        "WN-012",
+        "Wedding Netela Pair",
+        "Wedding",
+        "110.00",
+        18,
+        False,
+        "Matched bride and groom netela pair with coordinated tilf borders for ceremony photos.",
+    ),
+    (
+        "EK-013",
+        "Everyday Soft Kemis",
+        "Women's Wear",
+        "98.00",
+        45,
+        False,
+        "Lightweight daily kemis with minimal trim. Comfortable for home, market days, and travel.",
+    ),
+    (
+        "TB-014",
+        "Handwoven Tilf Belt",
+        "Accessories",
+        "28.00",
+        60,
+        False,
+        "Narrow handwoven belt with diamond tilf pattern. Cinched over a kemis or shemma shirt.",
+    ),
+    (
+        "ZC-015",
+        "Zuria Ceremony Set",
+        "Wedding",
+        "280.00",
+        12,
+        True,
+        "Layered zuria-inspired ceremony set with embroidered panels and a matching wrap.",
+    ),
+    (
+        "TP-016",
+        "Tilf Stripe Pants",
+        "Men's Wear",
+        "64.00",
+        26,
+        False,
+        "Straight cotton trousers with a discreet tilf stripe at the cuff. Pair with the shemma shirt.",
+    ),
 ]
+
+SIZED_PRODUCTS = {
+    "Tigray Tilf Kemis",
+    "Classic White Habesha Kemis",
+    "Golden Tibeb Dress",
+    "Bridal Habesha Kemis",
+    "Festive Red-Trim Kemis",
+    "Everyday Soft Kemis",
+    "Kids Mini Kemis",
+}
 
 
 def _font(size):
@@ -105,33 +180,52 @@ def _font(size):
     return ImageFont.load_default()
 
 
+def _draw_tilf_band(d, y, w, band_h=18):
+    colors = [
+        (0, 120, 60),
+        (255, 204, 0),
+        (180, 40, 40),
+        (20, 20, 20),
+        (196, 163, 90),
+    ]
+    x = 0
+    i = 0
+    while x < w:
+        d.rectangle((x, y, min(x + 28, w), y + band_h), fill=colors[i % len(colors)])
+        x += 28
+        i += 1
+
+
 def _draw_product(name):
-    w, h = 900, 720
-    bg, accent = PALETTE.get(name, ((31, 107, 74), (201, 162, 39)))
-    img = Image.new("RGB", (w, h), (246, 241, 231))
+    """Branded product tile: white kemis silhouette + Tigray tilf bands."""
+    w, h = 900, 1100
+    img = Image.new("RGB", (w, h), (247, 241, 230))
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, w, 18), fill=bg)
-    d.rectangle((0, h - 110, w, h), fill=bg)
-    cx, cy = w // 2, h // 2 - 30
-    d.rounded_rectangle((cx - 140, cy - 110, cx + 140, cy + 110), 28, fill=accent, outline=bg, width=8)
-    d.text((40, h - 78), name, fill=(255, 255, 255), font=_font(36))
-    d.text((40, h - 38), "Adera", fill=(232, 220, 196), font=_font(18))
+    _draw_tilf_band(d, 0, w, 28)
+    # soft stage
+    d.ellipse((80, 160, w - 80, 980), fill=(255, 252, 247), outline=(196, 163, 90), width=3)
+    # dress body
+    dress = [(450, 220), (560, 300), (620, 520), (640, 880), (260, 880), (280, 520), (340, 300)]
+    d.polygon(dress, fill=(255, 255, 255), outline=(61, 42, 26))
+    # tilf hem
+    _draw_tilf_band(d, 850, w, 30)
+    d.rectangle((260, 850, 640, 900), fill=None)
+    for i, color in enumerate([(0, 120, 60), (255, 204, 0), (180, 40, 40), (20, 20, 20), (196, 163, 90)]):
+        d.rectangle((270 + i * 70, 855, 330 + i * 70, 895), fill=color)
+    # sleeve accents
+    d.rectangle((300, 340, 360, 380), fill=(180, 40, 40))
+    d.rectangle((540, 340, 600, 380), fill=(0, 120, 60))
+    d.rectangle((0, h - 140, w, h), fill=(61, 42, 26))
+    d.text((40, h - 100), name[:36], fill=(255, 255, 255), font=_font(34))
+    d.text((40, h - 52), "Tradiva · Wear Your Heritage", fill=(196, 163, 90), font=_font(18))
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=88)
+    img.save(buf, format="JPEG", quality=90)
     return buf.getvalue()
 
 
 def _photo_bytes(name):
-    url = PHOTO_URLS.get(name)
-    if url:
-        try:
-            req = Request(url, headers={"User-Agent": "AderaCatalog/1.0"})
-            with urlopen(req, timeout=20) as resp:
-                data = resp.read()
-            if data[:3] == b"\xff\xd8\xff" or data[:8] == b"\x89PNG\r\n\x1a\n":
-                return data
-        except OSError:
-            pass
+    # Prefer on-brand traditional tiles so every sample looks like Tigray / Habesha dress.
+    # External fashion stock often misses tilf/kemis detail.
     return _draw_product(name)
 
 
@@ -155,7 +249,7 @@ def _attach_image(product, force=False):
 
 
 class Command(BaseCommand):
-    help = "Seed Adera catalog: categories, products, images, WELCOME10 coupon"
+    help = "Seed Tradiva catalog: Tigray / Habesha clothing, images, WELCOME10"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -163,16 +257,26 @@ class Command(BaseCommand):
             action="store_true",
             help="Replace existing product images",
         )
+        parser.add_argument(
+            "--replace",
+            action="store_true",
+            help="Deactivate products not in the Tradiva clothing catalog",
+        )
 
     def handle(self, *args, **options):
         force = options["force_images"]
+        replace = options["replace"]
         cat_map = {}
         for name in CATEGORIES:
             cat, _ = Category.objects.get_or_create(
-                slug=name.lower(), defaults={"name": name}
+                slug=slugify(name), defaults={"name": name}
             )
+            if cat.name != name:
+                cat.name = name
+                cat.save(update_fields=["name"])
             cat_map[name] = cat
 
+        keep_skus = {row[0] for row in CATALOG}
         created = 0
         imaged = 0
         for sku, name, cat_name, price, stock, featured, description in CATALOG:
@@ -185,6 +289,7 @@ class Command(BaseCommand):
                     "description": description,
                     "is_active": True,
                     "is_featured": featured,
+                    "currency": "USD",
                 },
             )
             updates = []
@@ -200,6 +305,12 @@ class Command(BaseCommand):
             if prod.is_featured != featured:
                 prod.is_featured = featured
                 updates.append("is_featured")
+            if not prod.is_active:
+                prod.is_active = True
+                updates.append("is_active")
+            if Decimal(str(prod.price)) != Decimal(price):
+                prod.price = Decimal(price)
+                updates.append("price")
             if updates:
                 prod.save(update_fields=updates)
 
@@ -210,8 +321,30 @@ class Command(BaseCommand):
                     inv.quantity = stock
                     inv.save(update_fields=["quantity"])
                 created += 1
-            if _attach_image(prod, force=force):
+            if _attach_image(prod, force=force or was):
                 imaged += 1
+
+            if name in SIZED_PRODUCTS:
+                for size in ("S", "M", "L", "XL"):
+                    ProductVariant.objects.get_or_create(
+                        sku=f"{prod.sku}-{size}",
+                        defaults={
+                            "product": prod,
+                            "name": size,
+                            "price": None,
+                            "stock": max(4, stock // 4),
+                            "options": {"size": size},
+                            "is_active": True,
+                        },
+                    )
+
+        if replace:
+            deactivated = (
+                Product.objects.exclude(sku__in=keep_skus)
+                .filter(is_active=True)
+                .update(is_active=False)
+            )
+            self.stdout.write(f"Deactivated {deactivated} old catalog items.")
 
         Coupon.objects.get_or_create(
             code="WELCOME10",
@@ -219,7 +352,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Adera catalog ready ({Product.objects.count()} products, "
+                f"Tradiva catalog ready ({Product.objects.filter(is_active=True).count()} active, "
                 f"{created} new, {imaged} images)"
             )
         )

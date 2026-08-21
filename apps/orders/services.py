@@ -1,10 +1,11 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.cart import services as cart_services
+from apps.products.models import ProductVariant
 from apps.inventory.services import (
     commit_reservation,
     release_reservation,
@@ -24,6 +25,7 @@ from common.constants import (
 from common.exceptions import ServiceError
 
 from .models import Coupon, Order, OrderItem
+from . import telegram as telegram_notify
 
 
 def _idempotent_order(request, key: str, email: str):
@@ -47,7 +49,7 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
         return existing
 
     cart = cart_services.get_or_create_cart(request)
-    items = list(cart.items.select_related("product"))
+    items = list(cart.items.select_related("product", "variant"))
     if not items:
         raise ServiceError("Cart is empty", code="empty_cart")
 
@@ -82,15 +84,26 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
     )
 
     reserved = []
+    variant_reserved = []
     try:
         for ci in items:
-            reserve_stock(ci.product, ci.quantity, reference=order.order_number)
-            reserved.append((ci.product, ci.quantity))
+            if ci.variant_id:
+                variant = ProductVariant.objects.select_for_update().get(pk=ci.variant_id)
+                if variant.stock < ci.quantity:
+                    raise ServiceError("Insufficient stock", code="out_of_stock")
+                variant.stock -= ci.quantity
+                variant.save(update_fields=["stock"])
+                variant_reserved.append((variant, ci.quantity))
+            else:
+                reserve_stock(ci.product, ci.quantity, reference=order.order_number)
+                reserved.append((ci.product, ci.quantity))
             OrderItem.objects.create(
                 order=order,
                 product=ci.product,
+                variant=ci.variant,
                 product_name=ci.product.name,
-                sku=ci.product.sku,
+                sku=ci.variant.sku if ci.variant_id else ci.product.sku,
+                variant_name=ci.variant.name if ci.variant_id else "",
                 unit_price=ci.unit_price,
                 quantity=ci.quantity,
                 line_total=ci.line_total,
@@ -98,6 +111,9 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
     except ServiceError:
         for product, qty in reserved:
             release_reservation(product, qty, reference=order.order_number)
+        for variant, qty in variant_reserved:
+            variant.stock += qty
+            variant.save(update_fields=["stock"])
         order.delete()
         raise
 
@@ -108,6 +124,7 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
     order.recompute_totals()
     cart_services.clear_cart(cart)
     notify_order_placed(order)
+    telegram_notify.notify_order_placed(order)
     return order
 
 
@@ -115,7 +132,9 @@ def create_order_from_cart(request, checkout_data: dict) -> Order:
 def mark_order_paid(order: Order) -> Order:
     if order.status == ORDER_STATUS_PAID:
         return order
-    for item in order.items.select_related("product"):
+    for item in order.items.select_related("product", "variant"):
+        if item.variant_id:
+            continue  # variant stock already deducted at checkout
         if item.product_id:
             commit_reservation(item.product, item.quantity, reference=order.order_number)
     order.status = ORDER_STATUS_PAID
@@ -134,8 +153,12 @@ def cancel_order(order: Order) -> Order:
     if order.status == ORDER_STATUS_CANCELLED:
         return order
     if order.status == ORDER_STATUS_PENDING:
-        for item in order.items.select_related("product"):
-            if item.product_id:
+        for item in order.items.select_related("product", "variant"):
+            if item.variant_id:
+                ProductVariant.objects.filter(pk=item.variant_id).update(
+                    stock=models.F("stock") + item.quantity
+                )
+            elif item.product_id:
                 release_reservation(item.product, item.quantity, reference=order.order_number)
     order.status = ORDER_STATUS_CANCELLED
     order.save(update_fields=["status", "updated_at"])
@@ -153,6 +176,7 @@ def ship_order(order: Order, tracking_number: str = "", carrier: str = "") -> Or
     order.save(
         update_fields=["status", "tracking_number", "carrier", "shipped_at", "updated_at"]
     )
+    telegram_notify.notify_order_shipped(order)
     return order
 
 
@@ -174,8 +198,12 @@ def refund_order(order: Order) -> Order:
         ORDER_STATUS_DELIVERED,
     ):
         raise ServiceError("This order cannot be refunded", code="invalid_status")
-    for item in order.items.select_related("product"):
-        if item.product_id:
+    for item in order.items.select_related("product", "variant"):
+        if item.variant_id:
+            ProductVariant.objects.filter(pk=item.variant_id).update(
+                stock=models.F("stock") + item.quantity
+            )
+        elif item.product_id:
             restock_sold(item.product, item.quantity, reference=order.order_number)
     order.status = ORDER_STATUS_REFUNDED
     order.save(update_fields=["status", "updated_at"])

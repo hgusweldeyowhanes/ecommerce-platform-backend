@@ -181,6 +181,7 @@ EMAIL_BACKEND = env(
     default="django.core.mail.backends.console.EmailBackend",
 )
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@ecommerce.local")
+FRONTEND_URL = env("FRONTEND_URL", default="http://127.0.0.1:5173")
 
 # Payments
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
@@ -239,3 +240,6 @@ LOGGING = {
         "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
+
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_CHAT_ID = env("TELEGRAM_CHAT_ID", default="")

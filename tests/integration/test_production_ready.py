@@ -118,3 +118,53 @@ class WebhookSecurityTests(TestCase):
                 HTTP_STRIPE_SIGNATURE="bad",
             )
         self.assertEqual(r.status_code, 400)
+
+
+class VariantAndDashboardTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username="buyer3", password="pass12345")
+        self.staff = User.objects.create_user(
+            username="desk", password="pass12345", is_staff=True
+        )
+        self.product = Product.objects.create(
+            name="Tee", sku="TEE-1", price="15.00", is_active=True
+        )
+        from apps.products.models import ProductVariant
+
+        self.variant = ProductVariant.objects.create(
+            product=self.product, name="M", sku="TEE-1-M", stock=4
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_variant_required_then_add(self):
+        r = self.client.post(
+            "/api/v1/cart/items/",
+            {"product_id": self.product.id, "quantity": 1},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post(
+            "/api/v1/cart/items/",
+            {"product_id": self.product.id, "quantity": 1, "variant_id": self.variant.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["items"][0]["variant_name"], "M")
+
+    def test_staff_dashboard(self):
+        self.client.force_authenticate(user=self.staff)
+        r = self.client.get("/api/v1/orders/dashboard/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("orders", r.data)
+
+
+class ChapaWebhookTests(TestCase):
+    @override_settings(CHAPA_WEBHOOK_SECRET="secret", CHAPA_SECRET_KEY="secret", DEBUG=False)
+    def test_missing_signature_rejected(self):
+        r = self.client.post(
+            "/api/v1/payments/webhooks/chapa/",
+            data={"tx_ref": "x", "status": "success"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)

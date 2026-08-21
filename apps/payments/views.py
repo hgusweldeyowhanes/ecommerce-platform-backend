@@ -113,7 +113,12 @@ class ChapaWebhookView(APIView):
             or ""
         )
         expected = hmac.new(secret.encode(), request.body, hashlib.sha256).hexdigest()
-        if signature and not hmac.compare_digest(signature, expected):
+        if not signature:
+            if settings.DEBUG:
+                logger.warning("Chapa webhook with no signature (allowed in DEBUG)")
+            else:
+                return Response({"detail": "missing signature"}, status=400)
+        elif not hmac.compare_digest(signature, expected):
             return Response({"detail": "invalid signature"}, status=400)
 
         data = request.data if isinstance(request.data, dict) else {}

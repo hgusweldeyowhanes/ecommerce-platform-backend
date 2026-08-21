@@ -1,6 +1,6 @@
 # Ecommerce API (Django REST)
 
-Backend for **Adera**. Pair with `ecommerce-platform-frontend`.
+Backend for **Tradiva**. Pair with `ecommerce-platform-frontend`.
 
 ## Local run
 
